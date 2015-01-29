@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<link rel="stylesheet" href="style.css" />
+	<style>
+	#well_width_title, #well_width_slider, #width, #frequency, #energy { float: left; }
+	#well_width_slider { margin: 1em 0 0; }
+	#width, #frequency, #energy { margin: 0 0.5em; }
+	</style>
+	<title>1D Finite Potential Well</title>
+</head>
+<body>
+	<div id="container">
+		<h1>1D Finite Potential Well</h1>
+		<canvas id="canvas" width="800" height="600"></canvas>
+		<h4 id="color_legend">Legend: Probability <span style="color: #00f">Real</span> <span style="color: #f00">Imaginary</span> <span style="color: #0f0">Energy</span> </h4>
+		<h4 id="well_width_title">Well Width</h4>
+		<input id="well_width_slider" type="range" min="0.2" max="2.0" value="1.6" step="0.05" onchange="handle_slider();" style="width: 70%;">
+		<div class="clear"></div>
+		<br/>
+		<input id="excite_button" type="button" value="Excite" onclick="handle_excite();">
+		<input id="deexcite_button" type="button" value="De-excite" onclick="handle_deexcite();">
+		<select name="well_type" id="well_type" onchange="handle_select();">
+			<option value="square">Square</option>
+			<option value="barrier">0.1 nm Barrier</option>
+			<option value="harmonic">Harmonic Oscillator</option>
+		</select>
+		<label id="show_psi_label"><input id="show_psi" type="checkbox" value="runClock"> Time Dependent</label>
+		<br/><br/>
+		<p id="width">0 nm</p> <p id="frequency">0 Hz</p> <p id="energy">0 eV</p>
+		<div class="clear"></div>
+		<br/>
+	</div>
+</body>
+<script src="js/constants.js"></script>
+<script src="js/complex.js"></script>
+<script src="js/draw_fn.js"></script>
+<script src="js/particle.js"></script>
+<script src="js/potential_well.js"></script>
+<script type="text/javascript">
+var canvas = document.getElementById('canvas');
+var electron = new Particle();
+var well = new Potential_Well();
+well.add_particle(electron);
+
+function handle_select() {
+	var dropdown = document.getElementById('well_type');
+	well.V = function(x) {
+		var height = 2 * eV;
+		if (dropdown.value === 'square') {
+			if (x < well.margin) {
+				return height;
+			} else if (x < well.margin + well.width) {
+				return 0;
+			} else {
+				return height;
+			}
+		} else if (dropdown.value === 'barrier') {
+			if (x < well.margin) {
+				return height;
+			} else if (x < well.margin + well.width / 2 - 0.05 * Math.pow(10, -9)) {
+				return 0;
+			} else if (x < well.margin + well.width / 2 + 0.05 * Math.pow(10, -9)) {
+				return height;
+			} else if (x < well.width + well.margin) {
+				return 0;
+			} else {
+				return height;
+			}
+		} else if (dropdown.value === 'harmonic') {
+			if (x < well.margin) {
+				return height;
+			} else if (x < well.margin + well.width) {
+				return 4 * height / Math.pow(well.width, 2) * Math.pow(x - well.margin - well.width / 2, 2);
+			} else {
+				return height;
+			}
+		} else {
+			return height;
+		}
+	}
+	well.calc_eigen(0.2*Math.pow(10, -9), 2.0*Math.pow(10, -9), 0.05*Math.pow(10, -9));
+	handle_slider();
+}
+
+function draw() {
+	canvas.width = canvas.width;
+	var height = (canvas.height - 20)*2/3;
+	var domain = well.width + 2 * well.margin;
+	draw_fn(canvas, function (x) { return well.V(x); }, 
+		0, 10, canvas.width*0.9, height, domain, well.max_V(), 2, '#000');
+	draw_fn(canvas, function (x) { return well.P(x); }, 
+		0, 10, canvas.width*0.9, height, domain, well.max_P(), 1, '#000');
+	if (show_psi.checked) {
+		draw_fn(canvas, function (x) { return well.psi(x, t).x; }, 
+			0, 10, canvas.width*0.9, height, domain, well.max_psi()*2, 1, '#00f');
+		draw_fn(canvas, function (x) { return well.psi(x, t).y; }, 
+			0, 10, canvas.width*0.9, height, domain, well.max_psi()*2, 1, '#f00');
+	}
+	for (var n = 0; n < well.eigen_states.length; n++) {
+		draw_fn(canvas, function (x) { return well.eigen_states[n]*eV; }, 
+			canvas.width*0.9, 10, canvas.width*0.1, height, domain, well.max_V(), 2, 
+			((well.particle.n === n+1) ? '#0f0' : '#000'));
+	}
+	draw_fn(canvas, function (x) { return 0; }, 
+		canvas.width*0.9, 10, canvas.width*0.1, height, domain, well.max_V(), 2, '#000');
+	document.getElementById('width').innerText = (well.width * Math.pow(10, 9)).toFixed(2) + ' nm';
+	document.getElementById('energy').innerText = (well.eigen_states[electron.n - 1]).toFixed(3) + ' eV';
+	document.getElementById('frequency').innerText = parseInt(well.w / 2 / Math.PI * Math.pow(10, -12)) + ' THz';
+}
+
+function handle_slider() {
+	well.width = document.getElementById('well_width_slider').value * Math.pow(10, -9);
+	well.particle.n = 1;
+	well.calc_eigen_states();
+	well.calc_psi(well.eigen_states[electron.n - 1]*eV);
+	draw();
+}
+
+function handle_excite() {
+	if (well.eigen_states[well.particle.n]) {
+		well.particle.n++; well.calc_psi(well.eigen_states[electron.n - 1]*eV); draw();
+	}
+}
+
+function handle_deexcite() {
+	if (well.particle.n > 1) {
+		well.particle.n--; well.calc_psi(well.eigen_states[electron.n - 1]*eV); draw();
+	}
+}
+
+var show_psi = document.getElementById('show_psi');
+var t = 0;
+
+handle_select();
+
+var incrementTime = setInterval(function() {
+	if (show_psi.checked) { t += Math.pow(10, -17); draw(); }
+}, 32);
+</script>

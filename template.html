@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<link rel="stylesheet" href="style.css" />
+	<title>Simulation</title>
+</head>
+<body>
+	<div id="container">
+		<h1>Simulation</h1>
+		<canvas id="canvas" width="800" height="600"></canvas>
+		<input id="well_width_slider" type="range" min="0.2" max="2.0" value="1.2" step="0.1" onchange="handle_slider();" style="width: 90%;">
+		<br/>
+		<input id="excite_button" type="button" value="Excite" onclick="handle_excite();">
+		<input id="deexcite_button" type="button" value="De-excite" onclick="handle_deexcite();">
+		<div class="clear"></div>
+		<br/>
+	</div>
+</body>
+<script src="js/constants.js"></script>
+<script src="js/complex.js"></script>
+<script src="js/draw_fn.js"></script>
+<script src="js/particle.js"></script>
+<script src="js/potential_well.js"></script>
+<script type="text/javascript">
+var canvas = document.getElementById('canvas');
+var electron = new Particle();
+var well = new Potential_Well();
+well.add_particle(electron);
+well.V = function(x) {
+	var height = 2 * eV;
+	if (x < well.margin) {
+		return height;
+	} else if (x < well.margin + well.width) {
+		return 4 * height / well.width / well.width * (x - well.margin - well.width / 2) * (x - well.margin - well.width / 2);
+	} else {
+		return height;
+	}
+}
+
+function draw() {
+	well.calc_eigen_states();
+	well.calc_psi(well.eigen_states[electron.n - 1]*eV);
+	canvas.width = canvas.width;
+	var height = (canvas.height - 20)*2/3;
+	var domain = well.width + 2 * well.margin;
+	draw_fn(canvas, function (x) { return well.V(x); }, 0, 10, canvas.width, height, domain, well.max_V(), 2, '#000');
+	draw_fn(canvas, function (x) { return well.psi(x); }, 0, 10, canvas.width, height, domain, well.max_psi()*2, 1, '#00f');
+	draw_fn(canvas, function (x) { return well.P(x); }, 0, 10, canvas.width, height, domain, well.max_P(), 1, '#000');
+}
+
+function handle_slider() {
+	well.width = document.getElementById('well_width_slider').value * Math.pow(10, -9);
+	well.particle.n = 1;
+	draw();
+}
+
+function handle_excite() {
+	if (well.eigen_states[well.particle.n]) {
+		well.particle.n++; draw();
+	}
+}
+
+function handle_deexcite() {
+	if (well.particle.n > 1) {
+		well.particle.n--; draw();
+	}
+}
+
+handle_slider();
+</script>
