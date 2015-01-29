@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<link rel="stylesheet" href="style.css" />
+	<title>1D Infinite Potential Wells</title>
+	<style>
+	#color_legend { text-align: left; }
+	#well_width_title, #well_width_slider, #show_psi_label, #excite_button, #deexcite_button, #width, #frequency, #energy { float: left; }
+	#well_width_slider { margin: 1.4em 0.7em; }
+	#show_psi_label { font-size: 1.0em; margin: 0.4em 0.7em; }
+	#width, #frequency, #energy { margin: 0.4em 0.7em; }
+	</style>
+</head>
+<body>
+	<div id="container">
+		<h1>1D Infinite Potential Well</h1>
+		<canvas id="canvas" width="800" height="600"></canvas>
+		<h3 id="color_legend">Legend: <span style="color: #00f">Real</span> <span style="color: #f00">Imaginary</span> <span style="color: #0f0">Energy</span> </h3>
+		<h3 id="well_width_title">Well Width</h3>
+		<input id="well_width_slider" type="range" min="0.3" max="1.0" value="1.0" step="0.01" onchange="handle_slider();">
+		<label id="show_psi_label"><input id="show_psi" type="checkbox" value="runClock"> Time Dependent</label>
+		<div class="clear"></div>
+		<input id="excite_button" type="button" value="Excite" onclick="handle_excite();">
+		<input id="deexcite_button" type="button" value="De-excite" onclick="handle_deexcite();">
+		<div class="clear"></div>
+		<p id="width">0 nm</p> <p id="frequency">0 Hz</p> <p id="energy">0 eV</p>
+	</div>
+</body>
+<script type="text/javascript">
+// Universal constants
+var h    = 6.626068 * Math.pow(10, -34);
+var hbar = 1.054571 * Math.pow(10, -34);
+var eV   = 1.602176 * Math.pow(10, -19);
+var c    = 2.997924 * Math.pow(10, 8);
+
+// Complex number implementation
+function Complex(r, i) {
+	this.x = r;
+	this.y = i;
+	this.abs = function() {
+		return Math.sqrt(this.x * this.x + this.y * this.y);
+	};
+	this.toString = function() {
+		return '{' + this.x + ' + ' + this.y + 'i}';
+	};
+}
+Complex.add = function(a, b) {
+	if (a.constructor === Complex && b.constructor === Complex) {
+		return new Complex(a.x + b.x, a.y + b.y);
+	} else if (a.constructor === Complex && b.constructor === Number) {
+		return new Complex(a.x + b, a.y);
+	} else if (a.constructor === Number && b.constructor === Complex) {
+		return Complex.add(b, a);
+	} else if (a.constructor === Number && b.constructor === Number) {
+		return new Complex(a + b, 0);
+	}
+	return NaN;
+}
+Complex.multiply = function(a, b) {
+	if (a.constructor === Complex && b.constructor === Complex) {
+		return new Complex(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+	} else if (a.constructor === Complex && b.constructor === Number) {
+		return new Complex(a.x * b, a.y * b);
+	} else if (a.constructor === Number && b.constructor === Complex) {
+		return Complex.multiply(b, a);
+	} else if (a.constructor === Number && b.constructor === Number) {
+		return new Complex(a * b, 0);
+	}
+	return NaN;
+}
+
+function Particle() {
+	// Defaults to lone electron
+	this.mass = 9.10938188 * Math.pow(10, -31);
+	this.n = 1;
+	this.energy = 0;
+	this.set_energy = function(E) {
+		if (E) this.energy = E;
+	};
+}
+
+function Potential_Well() {
+	// Defaults to well with width = 1 nm
+	this.width = Math.pow(10, -9);
+	this.A = Math.sqrt(2 / this.width);
+	// MAX PARTICLE EXCITATION SET HERE
+	this.max_n = 6;
+	this.calc_particle_energy = function(p) {
+		if (!p) p = new Particle();
+		var E = Math.pow(p.n, 2) * Math.pow(h, 2) / (8 * p.mass * Math.pow(this.width, 2));
+		return E;
+	};
+	this.add_particle = function(p) {
+		this.particle = p;
+		p.set_energy(this.calc_particle_energy());
+	};
+	this.excite_particle = function(dn) {
+		if (!dn) dn = 1;
+		this.particle.n = Math.min(Math.max(this.particle.n + dn, 1), this.max_n);
+		this.particle.set_energy(this.calc_particle_energy());
+	};
+	this.set_width = function(w) {
+		if (!w) w = Math.pow(10, -9);
+		this.width = w;
+		this.particle.set_energy(this.calc_particle_energy());
+	}
+	this.psi = function(x, t) {
+		if (!t) t = 0;
+		var k = this.particle.n * Math.PI / this.width;
+		var w = hbar * k * k / (2 * this.particle.mass);
+		this.w = w;
+		var time_dependent = new Complex(Math.cos(w * t), Math.sin(w * t));
+		var psi = Complex.multiply(this.A * Math.sin(k * x), time_dependent);
+		return psi;
+	};
+	this.psi_max = function() {
+		var m = 0;
+		for (var x = 0; x < this.width; x += this.width /100) {
+			m = Math.max(this.psi(x).abs(), m);
+		}
+		return m;
+	}
+	this.P = function(x, t) {
+		if (!t) t = 0;
+		return Math.pow(this.psi(x, t).abs(), 2);
+	};
+	this.P_max = function() {
+		var m = 0;
+		for (var x = 0; x < this.width; x += this.width / 100) {
+			m = Math.max(this.P(x), m);
+		}
+		return m;
+	}
+	this.energy_max = function () {
+		var p = new Particle();
+		p.n = this.max_n;
+		return this.calc_particle_energy(p);
+	}
+}
+
+function draw(canvas, well) {
+	var ctx = canvas.getContext('2d');
+	canvas.width = canvas.width;
+	
+	// x: 10% for energy levels
+	// y: 33% at bottom for negative psi
+	var width = canvas.width * 0.9; var height = canvas.height*2/3;
+	// Maximum values for scaling
+	var max_width = Math.pow(10, -9);
+	var max_height_P = well.P_max(); var max_height_psi = well.psi_max()*2; var max_height_energy = well.energy_max();
+	var x_factor = width / max_width;
+	var y_factor_P = (height - 10) / max_height_P; var y_factor_psi = (height - 10) / max_height_psi; var y_factor_energy = (height - 10) / max_height_energy;
+	var left_edge = (max_width - well.width)/2 * x_factor + 1; var right_edge = left_edge + well.width * x_factor;
+	
+	// Probability
+	ctx.beginPath();
+	ctx.moveTo(left_edge, height);
+	for (var x = 0; x < well.width; x += well.width / 200) {
+		ctx.lineTo(left_edge + x * x_factor, height - well.P(x, t) * y_factor_P);
+	}
+	ctx.lineWidth = 1;
+	ctx.strokeStyle = '#000';
+	ctx.stroke();
+	ctx.closePath();
+	
+	// Energy Levels
+	for (var n = 1; n <= well.max_n; n++) {
+		var p = new Particle();
+		p.n = n;
+		var E = well.calc_particle_energy(p);
+		ctx.beginPath();
+		ctx.moveTo(canvas.width * 0.9, height - E * y_factor_energy);
+		ctx.lineTo(canvas.width, height - E * y_factor_energy);
+		ctx.strokeStyle = (n === well.particle.n) ? '#0f0' : '#000';
+		ctx.lineWidth = 2;
+		ctx.stroke();
+		ctx.closePath();
+	}
+	ctx.beginPath();
+	ctx.moveTo(canvas.width * 0.9, height); ctx.lineTo(canvas.width, height);
+	ctx.moveTo(canvas.width * 0.9, 0); ctx.lineTo(canvas.width * 0.9, height);
+	ctx.moveTo(canvas.width - 1, 0); ctx.lineTo(canvas.width - 1, height);
+	ctx.strokeStyle = '#000';
+	ctx.lineWidth = 2;
+	ctx.stroke();
+	ctx.closePath();
+	
+	// Psi
+	if (show_psi.checked) {
+		ctx.beginPath();
+		ctx.moveTo(left_edge, height);
+		for (var x = 0; x < well.width; x += well.width / 200) {
+			ctx.lineTo(left_edge + x * x_factor, height - well.psi(x, t).x * y_factor_psi);
+		}
+		ctx.lineWidth = 1;
+		ctx.strokeStyle = '#00f';
+		ctx.stroke();
+		ctx.closePath();
+		ctx.beginPath();
+		ctx.moveTo(left_edge, height);
+		for (var x = 0; x < well.width; x += well.width / 200) {
+			ctx.lineTo(left_edge + x * x_factor, height - well.psi(x, t).y * y_factor_psi);
+		}
+		ctx.lineWidth = 1;
+		ctx.strokeStyle = '#f00';
+		ctx.stroke();
+		ctx.closePath();
+	}
+	
+	// Well Walls
+	ctx.beginPath();
+	ctx.moveTo(left_edge, 0); ctx.lineTo(left_edge, height);
+	ctx.moveTo(right_edge, 0); ctx.lineTo(right_edge, height);
+	ctx.moveTo(left_edge, height); ctx.lineTo(right_edge, height);
+	ctx.lineWidth = 2;
+	ctx.strokeStyle = '#000';
+	ctx.stroke();
+	ctx.closePath();
+	
+	// Text
+	var E = well.calc_particle_energy(well.particle);
+	var freq = well.w / 2 / Math.PI / Math.pow(10, 12);
+	document.getElementById('width').innerText = (well.width * Math.pow(10, 9)).toFixed(2) + ' nm';
+	document.getElementById("frequency").innerText = freq.toFixed(0) + ' THz';
+	document.getElementById("energy").innerText = (E/eV).toFixed(3) + ' eV';
+}
+
+function handle_slider() {
+	well.set_width(well_width_slider.value * Math.pow(10, -9));
+	draw(canvas, well);
+}
+
+function handle_excite() {
+	well.excite_particle();
+	draw(canvas, well);
+}
+
+function handle_deexcite() {
+	well.excite_particle(-1);
+	draw(canvas, well);
+}
+
+var t = 0;
+var electron = new Particle();
+var well = new Potential_Well();
+var proton = new Particle();
+proton.mass = 1.67262158 * Math.pow(10, -27);
+
+well.add_particle(electron);
+var well_width_slider = document.getElementById('well_width_slider');
+var show_psi = document.getElementById('show_psi');
+
+// Set up canvas
+var canvas = document.getElementById('canvas');
+setInterval(function() { if (show_psi.checked) { draw(canvas, well); t += Math.pow(10, -17); } }, 32);
+handle_slider();
+
+</script>
